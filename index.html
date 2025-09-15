@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CryptoSim — Full</title>
+
+  <!-- Tailwind (quick) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- ApexCharts -->
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+  <!-- Firebase compat (optional) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    :root{
+      --bg-dark:#071427;
+      --card-dark:#0d2233;
+      --muted-dark:#9fb3cf;
+      --accent:#2EA1FF;
+    }
+    /* Themes */
+    body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; transition: background 0.18s, color 0.18s; }
+    body.dark { background: linear-gradient(180deg,var(--bg-dark), #021021); color: #e6f0ff; }
+    body.dark .card { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border: 1px solid rgba(255,255,255,0.03); }
+    body.light { background: #f8fafc; color: #0b1220; }
+    body.light .card { background: #fff; border: 1px solid rgba(2,6,23,0.04); color: #0b1220; }
+
+    .card { border-radius: 12px; padding: 14px; box-shadow: 0 6px 18px rgba(2,6,23,0.35); }
+    .glass { backdrop-filter: blur(6px); }
+
+    .muted { color: var(--muted-dark); }
+    body.light .muted { color: #6b7280; } /* prevent blending in light mode */
+
+    .coin-img{ width:20px; height:20px; border-radius:50%; object-fit:cover; }
+    .logo-mark{ width:40px; height:40px; }
+
+    /* buttons */
+    .btn { border-radius: 10px; padding: 8px 12px; font-weight:600; transition: transform .12s, box-shadow .12s; }
+    .btn:active{ transform: translateY(1px); }
+    .btn-sky{ background: linear-gradient(90deg,#0284c7,#06b6d4); color:white; box-shadow: 0 6px 18px rgba(2,132,199,0.18);}
+    .btn-green{ background: linear-gradient(90deg,#059669,#34d399); color:white; box-shadow: 0 6px 18px rgba(5,150,105,0.12);}
+    .btn-amber{ background: linear-gradient(90deg,#f59e0b,#fbbf24); color:#04111a; box-shadow:0 6px 18px rgba(245,158,11,0.12);}
+    .btn-gray{ background:#475569;color:white; box-shadow:0 6px 18px rgba(71,85,105,0.08); }
+
+    /* combobox */
+    .combo-list{ max-height:280px; overflow:auto; border-radius:8px; }
+    .combo-item{ padding:8px; display:flex; align-items:center; gap:10px; cursor:pointer; }
+    .combo-item:hover{ background: rgba(255,255,255,0.02); }
+
+    /* review stars */
+    .star { cursor:pointer; width:28px; height:28px; display:inline-block; }
+    .star svg { width:100%; height:100%; }
+    .star.on svg path { fill: #fbbf24; stroke: #f59e0b; }
+    .star.off svg path { fill: rgba(255,255,255,0.06); stroke: rgba(255,255,255,0.12); }
+    body.light .star.off svg path { fill: rgba(17,24,39,0.06); stroke: rgba(17,24,39,0.12); }
+  </style>
+</head>
+<body class="dark">
+
+<!-- NAV -->
+<header class="glass sticky top-0 z-40 card">
+  <div class="max-w-6xl mx-auto flex items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <!-- logo -->
+      <svg class="logo-mark" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#2EA1FF"/><stop offset="1" stop-color="#8A2BFF"/></linearGradient></defs>
+        <circle cx="32" cy="32" r="30" fill="url(#g)"></circle>
+        <path d="M20 40 L28 20 L44 36 L36 44 L28 32 L20 40 Z" fill="#021022"/>
+      </svg>
+      <div>
+        <div class="font-semibold">CryptoSim</div>
+        <div class="text-xs muted">Paper trading • Live prices</div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <input id="globalSearch" placeholder="Search coin (BTC, bitcoin)" class="hidden md:block px-3 py-2 rounded border bg-transparent dark:bg-transparent" />
+      <button id="donateBtn" class="btn btn-amber">Donate</button>
+      <button id="themeBtn" class="btn btn-gray">Light / Dark</button>
+      <button id="reviewOpenBtn" class="btn btn-amber">Leave Review</button>
+      <div id="userBadge" class="px-3 py-2 rounded bg-slate-800 text-sm">Guest</div>
+      <button id="authBtn" class="btn btn-sky">Sign up / Log in</button>
+    </div>
+  </div>
+</header>
+
+<!-- MAIN -->
+<div class="max-w-6xl mx-auto grid grid-cols-12 gap-6 p-6">
+  <!-- SIDEBAR -->
+  <aside class="col-span-3 space-y-4">
+    <div class="card glass">
+      <div class="flex items-center justify-between">
+        <div class="font-semibold">Markets</div>
+        <div class="text-xs muted">Top 1,000</div>
+      </div>
+
+      <div class="mt-3">
+        <label class="text-sm muted">Search / Select</label>
+        <input id="coinBox" placeholder="Type symbol or name (BTC)" class="w-full p-2 rounded border mt-2 bg-transparent" autocomplete="off" />
+        <div id="comboList" class="combo-list hidden glass mt-2"></div>
+        <div id="coinsStatus" class="mt-2 text-xs muted">Loading top coins...</div>
+      </div>
+
+      <div class="mt-4">
+        <label class="text-sm muted">Amount (USD)</label>
+        <input id="amount" type="number" value="100" class="w-full p-2 rounded border mt-2 bg-transparent" />
+      </div>
+
+      <div class="grid grid-cols-2 gap-2 mt-3">
+        <input id="buyDate" type="date" class="p-2 rounded border bg-transparent" />
+        <input id="sellDate" type="date" class="p-2 rounded border bg-transparent" />
+      </div>
+
+      <div class="flex gap-2 mt-3">
+        <button id="savePos" class="btn btn-sky flex-1">Simulate & Save</button>
+        <button id="exportCsv" class="btn btn-gray">Export</button>
+      </div>
+    </div>
+
+    <div class="card glass">
+      <div class="flex justify-between items-center">
+        <div class="font-semibold">Portfolio (summary)</div>
+        <div class="text-xs muted">Unrealized</div>
+      </div>
+      <div class="mt-3">
+        <table class="w-full text-sm">
+          <thead class="muted text-xs"><tr><th>Coin</th><th>Value</th><th>P/L</th></tr></thead>
+          <tbody id="portfolioTiny"></tbody>
+        </table>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="col-span-9 space-y-6">
+    <div class="card glass">
+      <div class="flex justify-between items-start">
+        <div>
+          <div id="coinTitle" class="text-2xl font-semibold">Pick a coin</div>
+          <div id="coinMeta" class="text-xs muted">Price: — • Market cap: —</div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="candleBtn" class="btn btn-gray">Candles</button>
+          <button id="lineBtn" class="btn btn-gray">Line</button>
+          <button id="refreshBtn" class="btn btn-gray">Refresh</button>
+        </div>
+      </div>
+
+      <div id="chart" style="height:420px;margin-top:12px"></div>
+    </div>
+
+    <div class="card glass">
+      <div class="flex justify-between items-center mb-3">
+        <div class="font-semibold">Positions</div>
+        <div class="text-xs muted">Saved positions</div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="muted text-xs"><tr><th>Coin</th><th>Buy @</th><th>Current</th><th>Amount</th><th>Value</th><th>P/L</th><th>Action</th></tr></thead>
+          <tbody id="positionsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card glass">
+      <div class="font-semibold mb-3">Reviews</div>
+      <div id="reviewsList" class="space-y-3"></div>
+    </div>
+  </main>
+</div>
+
+<!-- AUTH MODAL (simple but nicer) -->
+<div id="authModal" class="fixed inset-0 hidden items-center justify-center z-50">
+  <div class="absolute inset-0 bg-black/50"></div>
+  <div class="relative max-w-md w-full bg-white dark:bg-slate-900 rounded-lg p-6">
+    <div class="flex justify-between items-center">
+      <div class="font-semibold">Sign up / Log in</div>
+      <button id="authClose" class="text-sm muted">Close</button>
+    </div>
+    <div class="mt-4">
+      <input id="authEmail" placeholder="Email" class="w-full p-2 border rounded mb-2" />
+      <input id="authPass" type="password" placeholder="Password" class="w-full p-2 border rounded mb-3" />
+      <div class="flex gap-2">
+        <button id="authSignup" class="btn btn-sky flex-1">Sign up</button>
+        <button id="authLogin" class="btn btn-green flex-1">Log in</button>
+      </div>
+      <div id="authMsg" class="mt-3 text-sm muted"></div>
+      <div class="mt-2 text-xs muted">Tip: paste your Firebase config in the JS to enable real auth + Firestore sync</div>
+    </div>
+  </div>
+</div>
+
+<!-- REVIEW MODAL -->
+<div id="reviewModal" class="fixed inset-0 hidden items-center justify-center z-50">
+  <div class="absolute inset-0 bg-black/40"></div>
+  <div class="relative max-w-lg w-full bg-white dark:bg-slate-900 rounded-lg p-6">
+    <div class="flex justify-between items-center">
+      <div class="font-semibold">Leave a review</div>
+      <button id="reviewClose" class="text-sm muted">Close</button>
+    </div>
+
+    <div class="mt-4">
+      <div class="flex items-center gap-2" id="starRow">
+        <!-- stars inserted by JS -->
+      </div>
+      <textarea id="reviewText" rows="4" class="w-full p-2 border rounded mt-3" placeholder="Write what you think..."></textarea>
+      <div class="flex justify-end gap-2 mt-3">
+        <button id="submitReview" class="btn btn-sky">Submit review</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= CONFIG ================= */
+/* Optional: paste your Firebase config object below to enable full auth + Firestore sync */
+const FIREBASE_CONFIG = null; // e.g. { apiKey: "...", authDomain: "...", projectId: "...", ... }
+
+/* Demo proxy to avoid CORS issues — replace with your own proxy URL for production */
+const PROXY_ENABLED = true;
+const PROXY_URL = 'https://api.allorigins.win/raw?url=';
+
+/* Caching */
+const COIN_CACHE_KEY = 'cg_top1000_v5';
+const COIN_CACHE_TTL = 1000*60*60; // 1 hour
+const OHLC_CACHE_PREFIX = 'cg_ohlc_';
+const OHLC_TTL = 1000*60*60*6; // 6 hours
+
+/* State */
+let coins = [], coinMap = {}, positions = [], currentUser = null;
+let chartInstance = null;
+let currentChartMode = 'line'; // 'line' for quick, 'candlestick' for full
+let selectedCoin = null;
+let ratingValue = 5;
+
+function $(id){ return document.getElementById(id); }
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function ddmmyyyy(iso){ const [y,m,d]=iso.split('-'); return `${d}-${m}-${y}`; }
+
+/* ================= THEME ================= */
+function applyTheme(){
+  const t = localStorage.getItem('theme') || 'dark';
+  document.body.classList.remove('dark','light');
+  document.body.classList.add(t);
+}
+applyTheme();
+$('themeBtn').addEventListener('click', ()=>{
+  const next = document.body.classList.contains('dark') ? 'light' : 'dark';
+  localStorage.setItem('theme', next); applyTheme();
+  if(chartInstance) chartInstance.updateOptions({ theme: { mode: next }});
+});
+
+/* ================= AUTH (optional Firebase, else local demo) ================= */
+if(FIREBASE_CONFIG){
+  firebase.initializeApp(FIREBASE_CONFIG);
+  firebase.auth().onAuthStateChanged(async u=>{
+    if(u){ currentUser = { id: u.uid, email: u.email }; $('userBadge').textContent = `Signed in: ${u.email}`; loadPositionsFromStorage(); renderPositions(); updateAuthButton(); }
+    else { currentUser = null; $('userBadge').textContent = 'Guest'; loadPositionsFromStorage(); renderPositions(); updateAuthButton(); }
+  });
+} else {
+  // restore demo user if exists
+  const demo = localStorage.getItem('demo_user'); if(demo){ currentUser = { id: 'local_'+btoa(demo), email: demo }; $('userBadge').textContent = `Signed in: ${demo}`; }
+}
+
+function updateAuthButton(){
+  if(currentUser){ $('authBtn').textContent = 'Log out'; $('authBtn').className='btn btn-red'; }
+  else { $('authBtn').textContent = 'Sign up / Log in'; $('authBtn').className='btn btn-sky'; $('userBadge').textContent='Guest'; }
+}
+updateAuthButton();
+
+$('authBtn').addEventListener('click', ()=>{
+  if(currentUser){
+    // logout
+    if(FIREBASE_CONFIG){ firebase.auth().signOut(); }
+    else { currentUser = null; localStorage.removeItem('demo_user'); updateAuthButton(); loadPositionsFromStorage(); renderPositions(); }
+  } else {
+    $('authModal').classList.remove('hidden');
+  }
+});
+$('authClose').addEventListener('click', ()=> $('authModal').classList.add('hidden'));
+
+// sign up / login handlers
+$('authSignup').addEventListener('click', async ()=>{
+  const email = $('authEmail').value.trim(), pass = $('authPass').value;
+  if(!email || !pass){ $('authMsg').textContent = 'Provide email & password'; return; }
+  try{
+    if(FIREBASE_CONFIG){ const cred = await firebase.auth().createUserWithEmailAndPassword(email, pass); currentUser = { id: cred.user.uid, email: cred.user.email }; }
+    else { localStorage.setItem('demo_user', email); currentUser = { id: 'local_'+btoa(email), email }; }
+    $('authModal').classList.add('hidden'); updateAuthButton(); loadPositionsFromStorage(); renderPositions();
+  }catch(e){ $('authMsg').textContent = e.message; }
+});
+$('authLogin').addEventListener('click', async ()=>{
+  const email = $('authEmail').value.trim(), pass = $('authPass').value;
+  if(!email || !pass){ $('authMsg').textContent = 'Provide email & password'; return; }
+  try{
+    if(FIREBASE_CONFIG){ const cred = await firebase.auth().signInWithEmailAndPassword(email, pass); currentUser = { id: cred.user.uid, email: cred.user.email }; }
+    else { const demo = localStorage.getItem('demo_user'); if(demo===email){ currentUser = { id:'local_'+btoa(email), email }; } else throw new Error('User not found (local demo)'); }
+    $('authModal').classList.add('hidden'); updateAuthButton(); loadPositionsFromStorage(); renderPositions();
+  }catch(e){ $('authMsg').textContent = e.message; }
+});
+
+/* ================= PROXY FETCH ================= */
+function safeFetch(url){
+  const final = PROXY_ENABLED ? (PROXY_URL + encodeURIComponent(url)) : url;
+  return fetch(final);
+}
+
+/* ================= COIN LOADING (fast + lazy) ================= */
+async function loadInitialCoins(){
+  const cached = JSON.parse(localStorage.getItem(COIN_CACHE_KEY) || 'null');
+  const now = Date.now();
+  if(cached && cached.ts && (now - cached.ts) < COIN_CACHE_TTL){ coins = cached.data; coins.forEach(c=>coinMap[c.id]=c); $('coinsStatus').textContent=`Loaded ${coins.length} coins (cached)`; return; }
+  // Load top 250 first
+  try{
+    $('coinsStatus').textContent = 'Loading top coins... (first 250)';
+    const resp = await safeFetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1');
+    const first = await resp.json();
+    coins = first.map(c=>({id:c.id,symbol:c.symbol.toUpperCase(),name:c.name,image:c.image}));
+    coins.forEach(c=>coinMap[c.id]=c);
+    localStorage.setItem(COIN_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: coins }));
+    $('coinsStatus').textContent = `Loaded ${coins.length} coins (page 1)`;
+    // lazy load remaining pages in background
+    [2,3,4].forEach(async p=>{
+      try{
+        const r = await safeFetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=${p}`);
+        const arr = await r.json();
+        arr.forEach(c=>{ if(!coinMap[c.id]){ const obj = {id:c.id, symbol:c.symbol.toUpperCase(), name:c.name, image:c.image}; coins.push(obj); coinMap[c.id]=obj; }});
+        localStorage.setItem(COIN_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: coins }));
+        $('coinsStatus').textContent = `Loaded ${coins.length} coins (lazy)`;
+      }catch(_e){ console.warn('lazy load page',p,'failed'); }
+    });
+  }catch(e){
+    console.error('Initial coin load failed', e);
+    $('coinsStatus').textContent = 'Failed to load coins — check network / proxy';
+  }
+}
+
+/* combobox rendering */
+function showCombo(list){
+  const el = $('comboList'); el.innerHTML='';
+  if(!list || !list.length){ el.classList.add('hidden'); return; }
+  const frag = document.createDocumentFragment();
+  list.slice(0,200).forEach(c=>{
+    const row = document.createElement('div');
+    row.className = 'combo-item';
+    row.innerHTML = `<img src="${c.image}" class="coin-img"/><div><div class="font-semibold">${c.symbol}</div><div class="text-xs muted">${c.name}</div></div>`;
+    row.onclick = ()=>{ $('coinBox').value = `${c.symbol} — ${c.name}`; el.classList.add('hidden'); selectCoin(c); };
+    frag.appendChild(row);
+  });
+  el.appendChild(frag); el.classList.remove('hidden');
+}
+$('coinBox').addEventListener('input', function(){
+  const q = this.value.trim().toLowerCase();
+  if(!q) return showCombo(coins.slice(0,80));
+  const filtered = coins.filter(c=> c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q));
+  showCombo(filtered);
+});
+
+/* ================= CHART: FAST LINE then Candles ================= */
+async function drawQuickLine(coinId){
+  // 1-day market_chart (fast)
+  try{
+    const resp = await safeFetch(`https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=1&interval=minute`);
+    const j = await resp.json();
+    // j.prices = [[ts,price],...]
+    const series = j.prices.map(p=>({x:p[0], y:p[1]}));
+    // render line chart (fast)
+    const options = {
+      chart: { type: 'line', height: 420, animations: { enabled: false } },
+      series: [{ name: 'Price', data: series }],
+      xaxis: { type: 'datetime' },
+      theme: { mode: document.body.classList.contains('light') ? 'light' : 'dark' }
+    };
+    if(!chartInstance){ chartInstance = new ApexCharts($('chart'), options); await chartInstance.render(); }
+    else { chartInstance.updateOptions(options); chartInstance.updateSeries([{ data: series }]); }
+    currentChartMode = 'line';
+  }catch(e){ console.warn('quick line failed', e); }
+}
+
+async function drawCandlesWhenReady(coinId){
+  try{
+    // try cached OHLC first
+    const key = OHLC_CACHE_PREFIX + coinId + '_30';
+    const cached = JSON.parse(localStorage.getItem(key) || 'null');
+    let formatted = null;
+    if(cached && (Date.now() - cached.ts) < OHLC_TTL) formatted = cached.data;
+    else {
+      const resp = await safeFetch(`https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=30`);
+      if(!resp.ok) throw new Error('OHLC failed '+resp.status);
+      const j = await resp.json(); // [[ts,open,high,low,close],...]
+      formatted = j.map(item => ({ x: item[0], y: [item[1],item[2],item[3],item[4]] }));
+      localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data: formatted }));
+    }
+    if(formatted && formatted.length){
+      const options = {
+        chart: { type: 'candlestick', height:420, animations: { enabled: false } },
+        series: [{ data: formatted }],
+        xaxis: { type: 'datetime' },
+        theme: { mode: document.body.classList.contains('light') ? 'light' : 'dark' }
+      };
+      if(!chartInstance){ chartInstance = new ApexCharts($('chart'), options); await chartInstance.render(); }
+      else { chartInstance.updateOptions(options); chartInstance.updateSeries([{ data: formatted }]); }
+      currentChartMode = 'candlestick';
+    }
+  }catch(e){ console.warn('candles fetch failed', e); }
+}
+
+/* selectCoin orchestrator */
+async function selectCoin(c){
+  selectedCoin = c;
+  $('coinTitle').textContent = `${c.symbol} — ${c.name}`;
+  $('coinMeta').textContent = 'Loading prices...';
+  // first quick line chart
+  await drawQuickLine(c.id);
+  // background: fetch candle data and market meta
+  drawCandlesWhenReady(c.id).catch(()=>{});
+  // fetch market data for price/meta (fast)
+  try{
+    const resp = await safeFetch(`https://api.coingecko.com/api/v3/coins/${c.id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false`);
+    const md = await resp.json();
+    const price = md.market_data.current_price.usd;
+    const mcap = md.market_data.market_cap.usd;
+    $('coinMeta').textContent = `Price: $${price?.toLocaleString() || '—'} • Market cap: $${mcap?Math.round(mcap).toLocaleString():'—'}`;
+  }catch(e){ console.warn('meta failed', e); $('coinMeta').textContent = 'Price: —'; }
+}
+
+/* ================= POSITIONS & STORAGE ================= */
+function positionsKey(){ return 'positions:' + (currentUser?.id || 'guest'); }
+function loadPositionsFromStorage(){ positions = JSON.parse(localStorage.getItem(positionsKey()) || '[]'); }
+function savePositionsToStorage(){ localStorage.setItem(positionsKey(), JSON.stringify(positions)); }
+
+async function bulkPrices(ids){
+  if(!ids.length) return {};
+  const out = {}; const CHUNK = 150;
+  for(let i=0;i<ids.length;i+=CHUNK){
+    const chunk = ids.slice(i,i+CHUNK).join(',');
+    const resp = await safeFetch(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(chunk)}&vs_currencies=usd`);
+    const j = await resp.json(); Object.assign(out, j);
+    await sleep(120);
+  }
+  return out;
+}
+
+async function renderPositions(){
+  loadPositionsFromStorage();
+  const tbody = $('positionsBody'); tbody.innerHTML = '';
+  if(positions.length===0){
+    tbody.innerHTML = `<tr><td colspan="7" class="p-3 muted">No positions yet</td></tr>`;
+    $('portfolioTiny').innerHTML = `<tr><td class="p-2 muted">No positions</td><td></td><td></td></tr>`;
+    return;
+  }
+  const ids = [...new Set(positions.map(p=>p.coin))];
+  const priceMap = await bulkPrices(ids);
+  // portfolio tiny
+  const agg = {};
+  positions.forEach(p=>{
+    const cur = priceMap[p.coin]?.usd || 0; const val = p.qty * cur;
+    agg[p.coin] = agg[p.coin] || { value:0, pl:0 }; agg[p.coin].value += val; agg[p.coin].pl += (val - p.amount);
+  });
+  const small = Object.entries(agg).slice(0,6).map(([id,v])=>{
+    const coin = coinMap[id] || {}; return `<tr><td class="p-2"><div class="flex items-center gap-2"><img src="${coin.image||''}" class="coin-img"/> ${coin.symbol||id}</div></td><td class="p-2">$${v.value.toFixed(2)}</td><td class="p-2 ${v.pl>=0?'text-green-400':'text-red-400'}">${v.pl>=0?'+':''}$${v.pl.toFixed(2)}</td></tr>`;
+  }).join('');
+  $('portfolioTiny').innerHTML = small || `<tr><td class="p-2 muted">No positions</td><td></td><td></td></tr>`;
+
+  // positions table
+  positions.slice().reverse().forEach(p=>{
+    const coin = coinMap[p.coin] || {}; const cur = priceMap[p.coin]?.usd || 0; const value = p.qty * cur; const pl = value - p.amount;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="p-2"><div class="flex items-center gap-2"><img src="${coin.image||''}" class="coin-img"/><div><div class="font-medium">${coin.symbol||p.coin}</div><div class="text-xs muted">${coin.name||''}</div></div></div></td>
+      <td class="p-2">$${p.buyPrice.toFixed(4)}</td>
+      <td class="p-2">$${cur.toFixed(4)}</td>
+      <td class="p-2">$${p.amount.toFixed(2)}</td>
+      <td class="p-2">$${value.toFixed(2)}</td>
+      <td class="p-2 ${pl>=0? 'text-green-400':'text-red-400'}">${pl>=0?'+':''}$${pl.toFixed(2)}</td>
+      <td class="p-2"><button data-id="${p.id}" class="btn btn-gray">Delete</button></td>`;
+    tbody.appendChild(tr);
+  });
+  // delete handlers
+  tbody.querySelectorAll('button[data-id]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.getAttribute('data-id');
+      positions = positions.filter(x=>x.id!==id); savePositionsToStorage(); renderPositions();
+    });
+  });
+}
+
+/* Save new position */
+$('savePos').addEventListener('click', async ()=>{
+  const query = $('coinBox').value.trim();
+  const coin = coins.find(c=>`${c.symbol} — ${c.name}`.toLowerCase() === query.toLowerCase()) || coins.find(c=>c.symbol.toLowerCase()===query.toLowerCase()||c.name.toLowerCase()===query.toLowerCase()||c.id===query);
+  if(!coin) return alert('Select a coin from the left list before saving.');
+  const amount = parseFloat($('amount').value); if(!amount||amount<=0) return alert('Enter valid amount.');
+  const buyDate = $('buyDate').value || todayISO();
+  try{
+    let buyPrice = null;
+    if(buyDate === todayISO()){
+      const p = await bulkPrices([coin.id]); buyPrice = p[coin.id]?.usd;
+    } else {
+      const resp = await safeFetch(`https://api.coingecko.com/api/v3/coins/${coin.id}/history?date=${ddmmyyyy(buyDate)}`);
+      const j = await resp.json(); buyPrice = j.market_data?.current_price?.usd || null;
+    }
+    if(!buyPrice) throw new Error('Buy price unavailable');
+    const qty = amount / buyPrice;
+    const pos = { id:'pos_'+Date.now(), coin:coin.id, amount, buyPrice, qty, buyDate };
+    positions.push(pos); savePositionsToStorage(); renderPositions(); alert('Position saved (simulated).');
+  }catch(e){ alert('Save failed: '+ (e.message || e)); }
+});
+
+/* Export CSV */
+$('exportCsv').addEventListener('click', ()=>{
+  loadPositionsFromStorage(); if(!positions.length) return alert('No positions');
+  let csv = 'id,coin,amount,buyPrice,qty,buyDate\n'; positions.forEach(p=> csv += `${p.id},${p.coin},${p.amount},${p.buyPrice},${p.qty},${p.buyDate}\n`);
+  const blob = new Blob([csv], { type:'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'positions.csv'; a.click(); URL.revokeObjectURL(url);
+});
+
+/* ================= REVIEWS (fancy modal + stars) ================= */
+function renderStars(container, value){
+  container.innerHTML = '';
+  for(let i=1;i<=5;i++){
+    const s = document.createElement('span'); s.className = 'star ' + (i<=value ? 'on' : 'off');
+    s.innerHTML = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>`;
+    s.addEventListener('click', ()=>{ ratingValue = i; renderStars(container, ratingValue); });
+    container.appendChild(s);
+  }
+}
+$('reviewOpenBtn').addEventListener('click', ()=>{ $('reviewModal').classList.remove('hidden'); renderStars($('starRow'), ratingValue); $('reviewText').value=''; });
+
+$('reviewClose').addEventListener('click', ()=> $('reviewModal').classList.add('hidden'));
+$('submitReview').addEventListener('click', ()=>{
+  const text = $('reviewText').value.trim(); if(!text) return alert('Write a review first');
+  const key = 'cs_reviews_v2'; const cur = JSON.parse(localStorage.getItem(key)||'[]');
+  cur.push({ text, rating: ratingValue, ts: Date.now(), user: currentUser?.email || 'Guest' }); while(cur.length>100) cur.shift();
+  localStorage.setItem(key, JSON.stringify(cur)); $('reviewModal').classList.add('hidden'); renderReviews(); alert('Thanks for your review!');
+});
+function renderReviews(){
+  const key = 'cs_reviews_v2'; const cur = JSON.parse(localStorage.getItem(key)||'[]');
+  const out = cur.slice().reverse().map(r=>{
+    const stars = '★'.repeat(r.rating) + '☆'.repeat(5-r.rating);
+    return `<div class="p-3 rounded bg-slate-800/30 dark:bg-slate-800/40"><div class="flex justify-between"><div class="font-semibold">${r.user}</div><div class="text-xs muted">${new Date(r.ts).toLocaleString()}</div></div><div class="mt-2 text-sm">${r.text}</div><div class="mt-2 text-sm text-amber-300">${stars}</div></div>`;
+  }).join('') || `<div class="muted text-sm">No reviews yet</div>`;
+  $('reviewsList').innerHTML = out;
+}
+
+/* ================= INIT ================= */
+async function init(){
+  // default dates
+  $('buyDate').value = todayISO();
+  const t = new Date(); t.setDate(t.getDate()+1); $('sellDate').value = t.toISOString().slice(0,10);
+
+  // wire quick buttons
+  $('refreshBtn').addEventListener('click', ()=>{ if(selectedCoin) selectCoin(selectedCoin); renderPositions(); });
+  $('candleBtn').addEventListener('click', ()=>{ if(selectedCoin) drawCandlesWhenReady(selectedCoin.id); });
+  $('lineBtn').addEventListener('click', ()=>{ if(selectedCoin) drawQuickLine(selectedCoin.id); });
+
+  // load coins (fast + lazy)
+  await loadInitialCoins();
+  showCombo(coins.slice(0,80));
+  // if demo user exists restore
+  const demo = localStorage.getItem('demo_user'); if(demo && !currentUser){ currentUser = { id: 'local_'+btoa(demo), email: demo }; $('userBadge').textContent = `Signed in: ${demo}`; updateAuthButton(); }
+  loadPositionsFromStorage(); renderPositions(); renderReviews();
+  // keyboard: Enter in globalSearch
+  $('globalSearch').addEventListener('keyup', function(e){ if(e.key==='Enter'){ const q = this.value.trim().toLowerCase(); const found = coins.find(c=> c.symbol.toLowerCase()===q || c.id.toLowerCase()===q || c.name.toLowerCase()===q); if(found){ selectCoin(found); $('coinBox').value = `${found.symbol} — ${found.name}`; } else alert('Coin not found in cached list'); }});
+}
+init();
+
+/* small helper: re-assign global for debug if needed */
+window.cryptoSim = { selectCoin, loadInitialCoins, renderPositions, renderReviews };
+
+</script>
+</body>
+</html>
